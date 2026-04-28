@@ -46,6 +46,8 @@ Assets/GoogleService-Info.plist.meta
 # Firebase native libraries (too large for GitHub)
 Assets/Firebase/Plugins/x86_64/
 Assets/Firebase/Plugins/x86/
+Assets/Firebase/Plugins/osx/
+Assets/Firebase/Plugins/win/
 
 # Firebase Cloud Functions
 functions/node_modules/

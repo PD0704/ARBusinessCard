@@ -163,7 +163,7 @@ PlayerSettings:
   androidSupportedAspectRatio: 1
   androidMaxAspectRatio: 2.1
   applicationIdentifier:
-    Android: com.prahelikad.ARBusinessCard
+    Android: com.prahelikad.arbusinesscard
     Standalone: com.Prahelika-D.ARBusinessCard
   buildNumber:
     Standalone: 0

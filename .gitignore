@@ -32,16 +32,20 @@ Assets/StreamingAssets/VuforiaConfiguration.dat.meta
 Assets/Resources/AppConfig.asset
 Assets/Resources/AppConfig.asset.meta
 
+# Environment files
+.env
+*.env
+functions/.env
+
 # Firebase — google-services.json has project credentials
 Assets/google-services.json
 Assets/google-services.json.meta
 Assets/GoogleService-Info.plist
 Assets/GoogleService-Info.plist.meta
 
-# Environment files
-.env
-*.env
-functions/.env
+# Firebase native libraries (too large for GitHub)
+Assets/Firebase/Plugins/x86_64/
+Assets/Firebase/Plugins/x86/
 
 # Firebase Cloud Functions
 functions/node_modules/
@@ -56,3 +60,4 @@ Thumbs.db
 Desktop.iniPackages/*.tgz
 Packages/*.tgz
 Packages/*.unitypackage
+Assets/Firebase/Plugins/x86_64/

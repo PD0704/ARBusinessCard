@@ -192,4 +192,14 @@ public class AppStateManager : MonoBehaviour
 
 /// <summary>
 /// All possible app states.
-/// Each state corresponds to a UI pan
+/// Each state corresponds to a UI panel being shown.
+/// </summary>
+public enum AppState
+{
+    Splash,         // App loading, Firebase initializing
+    Auth,           // Login / register screen
+    Home,           // Main menu — My Card + Scan buttons
+    Scan,           // Camera open — AR or QR scanning
+    Profile,        // Viewing a scanned profile
+    ProfileSetup    // Creator filling in their own profile
+}

@@ -254,9 +254,8 @@ public class CardGenerator : MonoBehaviour
                 "android.intent.extra.STREAM", uri);
             intent.Call<AndroidJavaObject>("addFlags", 1);
 
-            AndroidJavaObject chooser = AndroidJavaClass
-                .CallStatic<AndroidJavaObject>(
-                "android.content.Intent",
+            AndroidJavaClass intentClass = new AndroidJavaClass("android.content.Intent");
+            AndroidJavaObject chooser = intentClass.CallStatic<AndroidJavaObject>(
                 "createChooser", intent, "Share your AR Business Card");
 
             activity.Call("startActivity", chooser);

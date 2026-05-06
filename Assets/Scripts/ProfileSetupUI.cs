@@ -167,6 +167,7 @@ public class ProfileSetupUI : MonoBehaviour
     /// </summary>
     private async void OnSaveClicked()
     {
+        Debug.Log($"Saving — name field value: '{nameField?.text}'");
         if (_isSaving) return;
         if (AuthManager.Instance?.CurrentUser == null)
         {
@@ -205,8 +206,12 @@ public class ProfileSetupUI : MonoBehaviour
             await docRef.UpdateAsync(updates);
 
             // Refresh local cache
+            // Wait briefly for Firestore write to complete
+            await System.Threading.Tasks.Task.Delay(1000);
             await ProfileService.Instance.FetchProfile(uid);
-
+            _currentProfile = ProfileService.Instance.CurrentProfile;
+            Debug.Log($"Profile fetched: {_currentProfile?.name}");
+            Debug.Log($"After save, CurrentProfile: {ProfileService.Instance.CurrentProfile?.name}");
             ShowFeedback("Profile saved successfully", true);
             Debug.Log("Profile saved to Firestore");
         }
@@ -239,11 +244,10 @@ public class ProfileSetupUI : MonoBehaviour
     /// </summary>
     private void OnGenerateCardClicked()
     {
-        var profile = ProfileService.Instance?.CurrentProfile;
+        var profile = ProfileService.Instance?.CurrentProfile ?? _currentProfile;
 
         if (profile == null)
         {
-            Debug.LogError("Cannot generate card — profile is null");
             ShowFeedback("Please save your profile first", false);
             return;
         }

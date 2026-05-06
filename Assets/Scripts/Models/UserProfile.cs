@@ -1,22 +1,24 @@
+using Firebase.Firestore;
 using System;
 
+[FirestoreData]
 [Serializable]
 public class UserProfile
 {
-    public string uid;
-    public string name;
-    public string role;
-    public string company;
-    public string email;
-    public string phone;
-    public string address;
-    public string linkedin;
-    public string portfolio;
-    public string pdfUrl;
-    public string cardImageUrl;
-    public string vuforiaTargetId;
-    public string initials;
-    public string initialsStyle;
+    [FirestoreProperty] public string uid { get; set; }
+    [FirestoreProperty] public string name { get; set; }
+    [FirestoreProperty] public string role { get; set; }
+    [FirestoreProperty] public string company { get; set; }
+    [FirestoreProperty] public string email { get; set; }
+    [FirestoreProperty] public string phone { get; set; }
+    [FirestoreProperty] public string address { get; set; }
+    [FirestoreProperty] public string linkedin { get; set; }
+    [FirestoreProperty] public string portfolio { get; set; }
+    [FirestoreProperty] public string pdfUrl { get; set; }
+    [FirestoreProperty] public string cardImageUrl { get; set; }
+    [FirestoreProperty] public string vuforiaTargetId { get; set; }
+    [FirestoreProperty] public string initials { get; set; }
+    [FirestoreProperty] public string initialsStyle { get; set; }
 
     // Empty constructor required for Firestore deserialization
     public UserProfile() { }

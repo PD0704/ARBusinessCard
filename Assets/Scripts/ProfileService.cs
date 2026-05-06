@@ -68,6 +68,7 @@ public class ProfileService : MonoBehaviour
         // Step 3 — save to cache and broadcast result
         if (profile != null)
         {
+            Debug.Log($"ProfileService fetched: name='{profile.name}', uid='{profile.uid}'");
             ProfileCache.Instance.SaveProfile(profile);
             CurrentProfile = profile;
             OnProfileFetched?.Invoke(profile);

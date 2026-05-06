@@ -125,11 +125,32 @@ public class AppStateManager : MonoBehaviour
         OnStateChanged?.Invoke(newState);
     }
 
+    // Add this field
+    private bool _isScanning = false;
+
     // Convenience methods for UI buttons to call directly
-    public void GoToHome() => GoToState(AppState.Home);
-    public void GoToScan() => GoToState(AppState.Scan);
+    // Modify GoToHome
+    public void GoToHome()
+    {
+        _isScanning = false;
+        GoToState(AppState.Home);
+    }
+
+    // Modify GoToScan
+    public void GoToScan()
+    {
+        _isScanning = true;
+        GoToState(AppState.Scan);
+    }
+
     public void GoToAuth() => GoToState(AppState.Auth);
-    public void GoToProfileSetup() => GoToState(AppState.ProfileSetup);
+
+    // Modify GoToProfileSetup
+    public void GoToProfileSetup()
+    {
+        _isScanning = false;
+        GoToState(AppState.ProfileSetup);
+    }
 
     /// <summary>
     /// Called when back button is pressed.
@@ -184,9 +205,15 @@ public class AppStateManager : MonoBehaviour
     /// <summary>
     /// When a profile is fetched after scanning, navigate to profile view.
     /// </summary>
+    // Modify HandleProfileFetched
     private void HandleProfileFetched(UserProfile profile)
     {
-        GoToState(AppState.Profile);
+        // Only navigate to Profile view if we were scanning
+        if (_isScanning)
+        {
+            _isScanning = false;
+            GoToState(AppState.Profile);
+        }
     }
 }
 

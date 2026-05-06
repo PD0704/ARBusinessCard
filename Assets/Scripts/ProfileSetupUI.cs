@@ -118,24 +118,44 @@ public class ProfileSetupUI : MonoBehaviour
     /// </summary>
     public void LoadCurrentProfile()
     {
-        var profile = ProfileService.Instance?.CurrentProfile;
-        if (profile == null) return;
+        var uid = AuthManager.Instance?.CurrentUser?.UserId;
+        if (string.IsNullOrEmpty(uid)) return;
 
+        // If profile already cached use it immediately
+        var cached = ProfileCache.Instance?.LoadProfile(uid);
+        if (cached != null)
+        {
+            PopulateFields(cached);
+            ProfileService.Instance.FetchProfile(uid); // refresh in background
+            return;
+        }
+
+        // No cache — fetch from Firebase
+        ShowFeedback("Loading profile...", true);
+        ProfileService.OnProfileFetched += OnProfileLoaded;
+        _ = ProfileService.Instance.FetchProfile(uid);
+    }
+
+    private void OnProfileLoaded(UserProfile profile)
+    {
+        ProfileService.OnProfileFetched -= OnProfileLoaded;
+        PopulateFields(profile);
+        ShowFeedback("", false);
+    }
+
+    private void PopulateFields(UserProfile profile)
+    {
         _currentProfile = profile;
-
-        if (nameField != null) nameField.text = profile.name;
-        if (roleField != null) roleField.text = profile.role;
-        if (companyField != null) companyField.text = profile.company;
-        if (phoneField != null) phoneField.text = profile.phone;
-        if (emailField != null) emailField.text = profile.email;
-        if (addressField != null) addressField.text = profile.address;
-        if (linkedinField != null) linkedinField.text = profile.linkedin;
-        if (portfolioField != null) portfolioField.text = profile.portfolio;
-
-        // Set initials style dropdown
+        if (nameField != null) nameField.text = profile.name ?? "";
+        if (roleField != null) roleField.text = profile.role ?? "";
+        if (companyField != null) companyField.text = profile.company ?? "";
+        if (phoneField != null) phoneField.text = profile.phone ?? "";
+        if (emailField != null) emailField.text = profile.email ?? "";
+        if (addressField != null) addressField.text = profile.address ?? "";
+        if (linkedinField != null) linkedinField.text = profile.linkedin ?? "";
+        if (portfolioField != null) portfolioField.text = profile.portfolio ?? "";
         if (initialsStyleDropdown != null)
             initialsStyleDropdown.value = profile.initialsStyle == "3" ? 1 : 0;
-
         UpdateInitialsPreview();
     }
 
@@ -219,9 +239,18 @@ public class ProfileSetupUI : MonoBehaviour
     /// </summary>
     private void OnGenerateCardClicked()
     {
-        // CardGenerator handles this — implemented next
-        CardGenerator.Instance?.GenerateCard(
-            ProfileService.Instance?.CurrentProfile);
+        var profile = ProfileService.Instance?.CurrentProfile;
+
+        if (profile == null)
+        {
+            Debug.LogError("Cannot generate card — profile is null");
+            ShowFeedback("Please save your profile first", false);
+            return;
+        }
+
+        Debug.Log($"Generating card for: {profile.name}");
+        ShowFeedback("Generating card...", true);
+        CardGenerator.Instance?.GenerateCard(profile);
     }
 
     /// <summary>

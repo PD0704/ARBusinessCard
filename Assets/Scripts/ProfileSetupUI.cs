@@ -126,7 +126,7 @@ public class ProfileSetupUI : MonoBehaviour
         if (cached != null)
         {
             PopulateFields(cached);
-            ProfileService.Instance.FetchProfile(uid); // refresh in background
+            _ = ProfileService.Instance.FetchProfile(uid); // refresh in background
             return;
         }
 

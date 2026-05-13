@@ -73,6 +73,9 @@ public class AuthManager : MonoBehaviour
             // Create initial Firestore profile
             await CreateInitialProfile(CurrentUser.UserId, name, email);
 
+            // Fetch profile immediately after registration
+            await ProfileService.Instance.FetchProfile(CurrentUser.UserId);
+
             OnLoginSuccess?.Invoke(CurrentUser);
         }
         catch (Exception e)
@@ -97,6 +100,11 @@ public class AuthManager : MonoBehaviour
 
             CurrentUser = result.User;
             Debug.Log($"User logged in: {CurrentUser.Email}");
+
+            // Fetch profile immediately after login
+            await ProfileService.Instance.FetchProfile(CurrentUser.UserId);
+            Debug.Log($"Profile fetched after login: {ProfileService.Instance.CurrentProfile?.name}");
+
             OnLoginSuccess?.Invoke(CurrentUser);
         }
         catch (Exception e)
@@ -125,7 +133,7 @@ public class AuthManager : MonoBehaviour
     /// Checks if a user session exists from a previous app launch.
     /// If yes, skip auth screen and go straight to Home.
     /// </summary>
-    private void CheckExistingSession()
+    private async void CheckExistingSession()
     {
         var auth = FirebaseManager.Instance.Auth;
         CurrentUser = auth.CurrentUser;
@@ -134,6 +142,10 @@ public class AuthManager : MonoBehaviour
         {
             Debug.Log($"Existing session found: {CurrentUser.Email}");
             OnLoginSuccess?.Invoke(CurrentUser);
+
+            // Auto-fetch profile immediately on session restore
+            await ProfileService.Instance.FetchProfile(CurrentUser.UserId);
+            Debug.Log($"Auto-fetched profile: {ProfileService.Instance.CurrentProfile?.name}");
         }
         else
         {

@@ -61,11 +61,7 @@ public class FirebaseManager : MonoBehaviour
 
     public async Task<UserProfile> FetchProfile(string uid)
     {
-        if (!IsInitialized)
-        {
-            Debug.LogError("Firebase not initialized yet");
-            return null;
-        }
+        if (!IsInitialized) return null;
 
         try
         {
@@ -74,9 +70,23 @@ public class FirebaseManager : MonoBehaviour
 
             if (snapshot.Exists)
             {
-                UserProfile profile = snapshot.ConvertTo<UserProfile>();
+                var profile = new UserProfile();
                 profile.uid = uid;
-                Debug.Log($"Profile fetched: {profile.name}");
+                profile.name = snapshot.TryGetValue("name", out string name) ? name : "";
+                profile.role = snapshot.TryGetValue("role", out string role) ? role : "";
+                profile.company = snapshot.TryGetValue("company", out string company) ? company : "";
+                profile.email = snapshot.TryGetValue("email", out string email) ? email : "";
+                profile.phone = snapshot.TryGetValue("phone", out string phone) ? phone : "";
+                profile.address = snapshot.TryGetValue("address", out string address) ? address : "";
+                profile.linkedin = snapshot.TryGetValue("linkedin", out string linkedin) ? linkedin : "";
+                profile.portfolio = snapshot.TryGetValue("portfolio", out string portfolio) ? portfolio : "";
+                profile.pdfUrl = snapshot.TryGetValue("pdfUrl", out string pdfUrl) ? pdfUrl : "";
+                profile.cardImageUrl = snapshot.TryGetValue("cardImageUrl", out string cardImageUrl) ? cardImageUrl : "";
+                profile.vuforiaTargetId = snapshot.TryGetValue("vuforiaTargetId", out string vuforiaTargetId) ? vuforiaTargetId : "";
+                profile.initials = snapshot.TryGetValue("initials", out string initials) ? initials : "";
+                profile.initialsStyle = snapshot.TryGetValue("initialsStyle", out string initialsStyle) ? initialsStyle : "2";
+
+                Debug.Log($"Profile fetched manually: {profile.name}");
                 return profile;
             }
             else

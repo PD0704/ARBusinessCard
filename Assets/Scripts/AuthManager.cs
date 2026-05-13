@@ -94,16 +94,19 @@ public class AuthManager : MonoBehaviour
         try
         {
             var auth = FirebaseManager.Instance.Auth;
-            var result = await auth.SignInWithEmailAndPasswordAsync(
-                email, password);
+            var result = await auth.SignInWithEmailAndPasswordAsync(email, password);
 
             CurrentUser = result.User;
             Debug.Log($"User logged in: {CurrentUser.Email}");
 
-            // Fetch profile immediately after login
+            // Clear stale cache
+            ProfileCache.Instance?.ClearProfile(CurrentUser.UserId);
+
+            // Fetch profile BEFORE navigating
             await ProfileService.Instance.FetchProfile(CurrentUser.UserId);
             Debug.Log($"Profile fetched after login: {ProfileService.Instance.CurrentProfile?.name}");
 
+            // Navigate AFTER profile ready
             OnLoginSuccess?.Invoke(CurrentUser);
         }
         catch (Exception e)
@@ -134,7 +137,6 @@ public class AuthManager : MonoBehaviour
     /// </summary>
     private async void CheckExistingSession()
     {
-        // Unsubscribe immediately to prevent multiple calls
         FirebaseManager.OnFirebaseReady -= CheckExistingSession;
 
         Debug.Log("CheckExistingSession called");
@@ -144,10 +146,15 @@ public class AuthManager : MonoBehaviour
 
         if (CurrentUser != null)
         {
-            Debug.Log("Fetching profile for existing session");
-            OnLoginSuccess?.Invoke(CurrentUser);
+            // Clear stale cache first
+            ProfileCache.Instance?.ClearProfile(CurrentUser.UserId);
+
+            // Fetch fresh from Firebase BEFORE navigating
             await ProfileService.Instance.FetchProfile(CurrentUser.UserId);
             Debug.Log($"Auto-fetched: {ProfileService.Instance.CurrentProfile?.name ?? "null"}");
+
+            // Navigate AFTER profile is ready
+            OnLoginSuccess?.Invoke(CurrentUser);
         }
         else
         {

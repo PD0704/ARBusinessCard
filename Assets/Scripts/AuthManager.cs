@@ -42,7 +42,6 @@ public class AuthManager : MonoBehaviour
 
     void Start()
     {
-        // Check if user is already logged in from previous session
         FirebaseManager.OnFirebaseReady += CheckExistingSession;
     }
 
@@ -135,17 +134,20 @@ public class AuthManager : MonoBehaviour
     /// </summary>
     private async void CheckExistingSession()
     {
+        // Unsubscribe immediately to prevent multiple calls
+        FirebaseManager.OnFirebaseReady -= CheckExistingSession;
+
+        Debug.Log("CheckExistingSession called");
         var auth = FirebaseManager.Instance.Auth;
         CurrentUser = auth.CurrentUser;
+        Debug.Log($"CurrentUser: {CurrentUser?.Email ?? "null"}");
 
         if (CurrentUser != null)
         {
-            Debug.Log($"Existing session found: {CurrentUser.Email}");
+            Debug.Log("Fetching profile for existing session");
             OnLoginSuccess?.Invoke(CurrentUser);
-
-            // Auto-fetch profile immediately on session restore
             await ProfileService.Instance.FetchProfile(CurrentUser.UserId);
-            Debug.Log($"Auto-fetched profile: {ProfileService.Instance.CurrentProfile?.name}");
+            Debug.Log($"Auto-fetched: {ProfileService.Instance.CurrentProfile?.name ?? "null"}");
         }
         else
         {

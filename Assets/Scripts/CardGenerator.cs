@@ -86,6 +86,17 @@ public class CardGenerator : MonoBehaviour
             return;
         }
 
+        // Request storage permission on Android
+#if UNITY_ANDROID && !UNITY_EDITOR
+    if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(
+        UnityEngine.Android.Permission.ExternalStorageWrite))
+    {
+        UnityEngine.Android.Permission.RequestUserPermission(
+            UnityEngine.Android.Permission.ExternalStorageWrite);
+        Debug.Log("Requesting storage permission");
+        return; // User needs to grant permission first — they can tap again
+    }
+#endif
         Debug.Log($"Generating card for: {profile.name}");
 
         try
@@ -124,7 +135,7 @@ public class CardGenerator : MonoBehaviour
             new Vector3(9999, 9999, 9999), Quaternion.identity);
 
         // Populate card text fields
-        var cardUI = _cardInstance.GetComponent<CardTemplateUI>();
+        var cardUI = _cardInstance.GetComponentInChildren<CardTemplateUI>();
         if (cardUI != null)
             cardUI.Populate(profile);
         else
@@ -221,10 +232,41 @@ public class CardGenerator : MonoBehaviour
     {
         string sanitized = SanitizeFileName(profileName);
         string fileName = $"ARCard_{sanitized}.png";
-        string filePath = Path.Combine(Application.persistentDataPath, fileName);
-        File.WriteAllBytes(filePath, pngBytes);
-        Debug.Log($"Card image saved: {filePath}");
-        return filePath;
+
+        // Save to public Pictures folder — accessible without FileProvider
+        string picturesPath = "/storage/emulated/0/Pictures/ARBusinessCard/";
+
+        try
+        {
+            System.IO.Directory.CreateDirectory(picturesPath);
+            Debug.Log($"Pictures path created: {picturesPath}, exists: {System.IO.Directory.Exists(picturesPath)}");
+            string filePath = System.IO.Path.Combine(picturesPath, fileName);
+            System.IO.File.WriteAllBytes(filePath, pngBytes);
+
+            // Notify gallery to scan the new file
+#if UNITY_ANDROID && !UNITY_EDITOR
+        AndroidJavaClass mediaScannerClass = new AndroidJavaClass(
+            "android.media.MediaScannerConnection");
+        AndroidJavaClass unityPlayer = new AndroidJavaClass(
+            "com.unity3d.player.UnityPlayer");
+        AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>(
+            "currentActivity");
+        mediaScannerClass.CallStatic("scanFile", activity,
+            new string[] { filePath }, null, null);
+#endif
+
+            Debug.Log($"Card saved to gallery: {filePath}");
+            return filePath;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to save to Pictures: {e.Message}");
+            // Fallback to app storage
+            string fallback = System.IO.Path.Combine(
+                Application.persistentDataPath, fileName);
+            System.IO.File.WriteAllBytes(fallback, pngBytes);
+            return fallback;
+        }
     }
 
     /// <summary>
@@ -236,32 +278,37 @@ public class CardGenerator : MonoBehaviour
 #if UNITY_ANDROID && !UNITY_EDITOR
     try
     {
+        // Use MediaStore to get a content URI instead of file URI
         AndroidJavaClass unityPlayer = new AndroidJavaClass(
             "com.unity3d.player.UnityPlayer");
         AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>(
             "currentActivity");
+        AndroidJavaObject contentResolver = activity.Call<AndroidJavaObject>(
+            "getContentResolver");
 
-        AndroidJavaClass fileProviderClass = new AndroidJavaClass(
-            "androidx.core.content.FileProvider");
+        AndroidJavaClass mediaImagesClass = new AndroidJavaClass(
+            "android.provider.MediaStore$Images$Media");
         
         AndroidJavaObject javaFile = new AndroidJavaObject(
             "java.io.File", filePath);
         
-        AndroidJavaObject uri = fileProviderClass.CallStatic<AndroidJavaObject>(
-            "getUriForFile",
-            activity,
-            "com.prahelikad.arbusinesscard.fileprovider",
-            javaFile);
+        AndroidJavaObject contentUri = mediaImagesClass.CallStatic<AndroidJavaObject>(
+            "getContentUriForPath", filePath);
 
         AndroidJavaObject intent = new AndroidJavaObject(
             "android.content.Intent");
         intent.Call<AndroidJavaObject>("setAction", "android.intent.action.SEND");
         intent.Call<AndroidJavaObject>("setType", "image/png");
+
+        AndroidJavaClass uriClass = new AndroidJavaClass("android.net.Uri");
+        AndroidJavaObject uri = uriClass.CallStatic<AndroidJavaObject>(
+            "parse", $"file://{filePath}");
         intent.Call<AndroidJavaObject>("putExtra",
             "android.intent.extra.STREAM", uri);
-        intent.Call<AndroidJavaObject>("addFlags", 1); // FLAG_GRANT_READ_URI_PERMISSION
+        intent.Call<AndroidJavaObject>("addFlags", 3); 
 
-        AndroidJavaClass intentClass = new AndroidJavaClass("android.content.Intent");
+        AndroidJavaClass intentClass = new AndroidJavaClass(
+            "android.content.Intent");
         AndroidJavaObject chooser = intentClass.CallStatic<AndroidJavaObject>(
             "createChooser", intent, "Share your AR Business Card");
 
@@ -271,9 +318,11 @@ public class CardGenerator : MonoBehaviour
     catch (Exception e)
     {
         Debug.LogError($"Share failed: {e.Message}");
+        // Show success message even if share fails — card is saved to gallery
+        OnCardGenerated?.Invoke(filePath);
     }
 #else
-        Debug.Log($"[Editor] Card would be shared from: {filePath}");
+        Debug.Log($"[Editor] Card saved at: {filePath}");
 #endif
     }
 

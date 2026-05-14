@@ -33,8 +33,13 @@ public class HomeUI : MonoBehaviour
         editProfileButton?.onClick.AddListener(OnEditProfileClicked);
         logoutButton?.onClick.AddListener(OnLogoutClicked);
 
-        // Load user profile and update welcome message
-        LoadUserName();
+        ProfileService.OnProfileFetched += HandleProfileFetched;
+
+        // If profile already loaded use it immediately
+        if (ProfileService.Instance?.CurrentProfile != null)
+            UpdateWelcome(ProfileService.Instance.CurrentProfile.name);
+        else
+            LoadUserName();
     }
 
     void OnDisable()
@@ -43,6 +48,12 @@ public class HomeUI : MonoBehaviour
         scanButton?.onClick.RemoveListener(OnScanClicked);
         editProfileButton?.onClick.RemoveListener(OnEditProfileClicked);
         logoutButton?.onClick.RemoveListener(OnLogoutClicked);
+        ProfileService.OnProfileFetched -= HandleProfileFetched;
+    }
+
+    private void HandleProfileFetched(UserProfile profile)
+    {
+        UpdateWelcome(profile.name);
     }
 
     // ── Private Methods ───────────────────────────────────────────

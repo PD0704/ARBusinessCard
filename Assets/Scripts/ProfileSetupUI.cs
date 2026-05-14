@@ -91,13 +91,17 @@ public class ProfileSetupUI : MonoBehaviour
         uploadPDFButton?.onClick.AddListener(OnUploadPDFClicked);
         generateCardButton?.onClick.AddListener(OnGenerateCardClicked);
         backButton?.onClick.AddListener(OnBackClicked);
-
-        // Update initials preview when name changes
         nameField?.onValueChanged.AddListener(OnNameChanged);
         initialsStyleDropdown?.onValueChanged.AddListener(OnInitialsStyleChanged);
 
-        // Load existing profile data into fields
-        LoadCurrentProfile();
+        // Listen for profile fetch
+        ProfileService.OnProfileFetched += OnProfileLoaded;
+
+        // If profile already loaded use it immediately
+        if (ProfileService.Instance?.CurrentProfile != null)
+            PopulateFields(ProfileService.Instance.CurrentProfile);
+        else
+            LoadCurrentProfile();
     }
 
     void OnDisable()
@@ -108,6 +112,7 @@ public class ProfileSetupUI : MonoBehaviour
         backButton?.onClick.RemoveListener(OnBackClicked);
         nameField?.onValueChanged.RemoveListener(OnNameChanged);
         initialsStyleDropdown?.onValueChanged.RemoveListener(OnInitialsStyleChanged);
+        ProfileService.OnProfileFetched -= OnProfileLoaded;
     }
 
     // ── Public Methods ────────────────────────────────────────────

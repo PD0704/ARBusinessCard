@@ -22,7 +22,7 @@ public class ProfileService : MonoBehaviour
 
     void Awake()
     {
-        // Singleton pattern — only one ProfileService exists at a time
+        Debug.Log($"ProfileService Awake — Instance exists: {Instance != null}");
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);

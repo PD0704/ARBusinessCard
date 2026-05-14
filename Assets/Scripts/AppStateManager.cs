@@ -11,34 +11,18 @@ public class AppStateManager : MonoBehaviour
 {
     public static AppStateManager Instance { get; private set; }
 
-    // ── Events ────────────────────────────────────────────────────
-    // Fired whenever app state changes — UI panels listen to this
     public static event Action<AppState> OnStateChanged;
 
-    // ── State ─────────────────────────────────────────────────────
     public AppState CurrentState { get; private set; } = AppState.Splash;
+    private bool _isScanning = false;
 
-    // ── Inspector References ──────────────────────────────────────
     [Header("UI Panels")]
-    [Tooltip("Splash screen panel")]
     [SerializeField] private GameObject splashPanel;
-
-    [Tooltip("Login / registration panel")]
     [SerializeField] private GameObject authPanel;
-
-    [Tooltip("Home screen panel — My Card + Scan buttons")]
     [SerializeField] private GameObject homePanel;
-
-    [Tooltip("Scan screen panel — QR and AR scan modes")]
     [SerializeField] private GameObject scanPanel;
-
-    [Tooltip("Profile overlay panel — shown after successful scan")]
     [SerializeField] private GameObject profilePanel;
-
-    [Tooltip("Profile setup panel — for creators filling their info")]
     [SerializeField] private GameObject profileSetupPanel;
-
-    // ── Lifecycle ─────────────────────────────────────────────────
 
     void Awake()
     {
@@ -53,30 +37,22 @@ public class AppStateManager : MonoBehaviour
 
     void Start()
     {
-        // Listen for Firebase ready to decide initial state
-        FirebaseManager.OnFirebaseReady += HandleFirebaseReady;
-        FirebaseManager.OnFirebaseError += HandleFirebaseError;
-
-        // Listen for profile fetch to navigate to profile view
+        // Listen to AuthManager — not FirebaseManager — for navigation
+        // AuthManager handles the session check and fires OnLoginSuccess when ready
+        AuthManager.OnLoginSuccess += HandleLoginSuccess;
+        AuthManager.OnLoggedOut += HandleLoggedOut;
         ProfileService.OnProfileFetched += HandleProfileFetched;
 
-        // Start at splash
         GoToState(AppState.Splash);
     }
 
     void OnDestroy()
     {
-        FirebaseManager.OnFirebaseReady -= HandleFirebaseReady;
-        FirebaseManager.OnFirebaseError -= HandleFirebaseError;
+        AuthManager.OnLoginSuccess -= HandleLoginSuccess;
+        AuthManager.OnLoggedOut -= HandleLoggedOut;
         ProfileService.OnProfileFetched -= HandleProfileFetched;
     }
 
-    // ── Public Methods ────────────────────────────────────────────
-
-    /// <summary>
-    /// Navigate to a new app state.
-    /// Activates the correct panel and deactivates all others.
-    /// </summary>
     public void GoToState(AppState newState)
     {
         if (CurrentState == newState) return;
@@ -84,7 +60,6 @@ public class AppStateManager : MonoBehaviour
         CurrentState = newState;
         Debug.Log($"App state: {newState}");
 
-        // Deactivate all panels first
         splashPanel?.SetActive(false);
         authPanel?.SetActive(false);
         homePanel?.SetActive(false);
@@ -92,31 +67,24 @@ public class AppStateManager : MonoBehaviour
         profilePanel?.SetActive(false);
         profileSetupPanel?.SetActive(false);
 
-        // Activate the correct panel
         switch (newState)
         {
             case AppState.Splash:
                 splashPanel?.SetActive(true);
                 break;
-
             case AppState.Auth:
                 authPanel?.SetActive(true);
                 break;
-
             case AppState.Home:
                 homePanel?.SetActive(true);
                 break;
-
             case AppState.Scan:
                 scanPanel?.SetActive(true);
-                // Default to AR mode when entering scan
                 ScanModeController.Instance?.ActivateARMode();
                 break;
-
             case AppState.Profile:
                 profilePanel?.SetActive(true);
                 break;
-
             case AppState.ProfileSetup:
                 profileSetupPanel?.SetActive(true);
                 break;
@@ -125,18 +93,12 @@ public class AppStateManager : MonoBehaviour
         OnStateChanged?.Invoke(newState);
     }
 
-    // Add this field
-    private bool _isScanning = false;
-
-    // Convenience methods for UI buttons to call directly
-    // Modify GoToHome
     public void GoToHome()
     {
         _isScanning = false;
         GoToState(AppState.Home);
     }
 
-    // Modify GoToScan
     public void GoToScan()
     {
         _isScanning = true;
@@ -145,17 +107,12 @@ public class AppStateManager : MonoBehaviour
 
     public void GoToAuth() => GoToState(AppState.Auth);
 
-    // Modify GoToProfileSetup
     public void GoToProfileSetup()
     {
         _isScanning = false;
         GoToState(AppState.ProfileSetup);
     }
 
-    /// <summary>
-    /// Called when back button is pressed.
-    /// Returns to previous logical screen.
-    /// </summary>
     public void GoBack()
     {
         switch (CurrentState)
@@ -163,52 +120,30 @@ public class AppStateManager : MonoBehaviour
             case AppState.Scan:
             case AppState.Profile:
             case AppState.ProfileSetup:
-                GoToState(AppState.Home);
+                GoToHome();
                 break;
             case AppState.Home:
-                GoToState(AppState.Auth);
-                break;
-            default:
+                GoToAuth();
                 break;
         }
     }
 
-    // ── Private Handlers ─────────────────────────────────────────
-
     /// <summary>
-    /// When Firebase is ready, check if user is already logged in.
-    /// If yes → Home. If no → Auth.
+    /// Called by AuthManager after login OR session restore — profile is already fetched at this point
     /// </summary>
-    private void HandleFirebaseReady()
+    private void HandleLoginSuccess(Firebase.Auth.FirebaseUser user)
     {
-        var auth = FirebaseManager.Instance.Auth;
-        if (auth.CurrentUser != null)
-        {
-            Debug.Log($"User already logged in: {auth.CurrentUser.Email}");
-            GoToState(AppState.Home);
-        }
-        else
-        {
-            GoToState(AppState.Auth);
-        }
+        Debug.Log($"AppStateManager: login success for {user.Email}, navigating to Home");
+        GoToState(AppState.Home);
     }
 
-    /// <summary>
-    /// When Firebase fails to initialize, stay on splash and log error.
-    /// In production this would show an error UI.
-    /// </summary>
-    private void HandleFirebaseError(string error)
+    private void HandleLoggedOut()
     {
-        Debug.LogError($"Firebase error, staying on splash: {error}");
+        GoToState(AppState.Auth);
     }
 
-    /// <summary>
-    /// When a profile is fetched after scanning, navigate to profile view.
-    /// </summary>
-    // Modify HandleProfileFetched
     private void HandleProfileFetched(UserProfile profile)
     {
-        // Only navigate to Profile view if we were scanning
         if (_isScanning)
         {
             _isScanning = false;
@@ -217,16 +152,12 @@ public class AppStateManager : MonoBehaviour
     }
 }
 
-/// <summary>
-/// All possible app states.
-/// Each state corresponds to a UI panel being shown.
-/// </summary>
 public enum AppState
 {
-    Splash,         // App loading, Firebase initializing
-    Auth,           // Login / register screen
-    Home,           // Main menu — My Card + Scan buttons
-    Scan,           // Camera open — AR or QR scanning
-    Profile,        // Viewing a scanned profile
-    ProfileSetup    // Creator filling in their own profile
+    Splash,
+    Auth,
+    Home,
+    Scan,
+    Profile,
+    ProfileSetup
 }

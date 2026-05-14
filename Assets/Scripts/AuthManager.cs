@@ -4,30 +4,20 @@ using UnityEngine;
 using Firebase.Auth;
 
 /// <summary>
-/// Handles Firebase Authentication — email/password registration and login.
-/// Single source of truth for current user session.
-/// Other scripts access current user via AuthManager.Instance.CurrentUser.
-/// Attach to the Managers GameObject in the scene.
+/// Handles Firebase Authentication.
+/// IMPORTANT: OnLoginSuccess fires AFTER profile is fetched — 
+/// so any subscriber (like AppStateManager) can safely access CurrentProfile.
 /// </summary>
 public class AuthManager : MonoBehaviour
 {
     public static AuthManager Instance { get; private set; }
 
-    // ── Events ────────────────────────────────────────────────────
-    // Fired when user successfully logs in or registers
     public static event Action<FirebaseUser> OnLoginSuccess;
-
-    // Fired when login or registration fails
     public static event Action<string> OnLoginFailed;
-
-    // Fired when user logs out
     public static event Action OnLoggedOut;
 
-    // ── State ─────────────────────────────────────────────────────
     public FirebaseUser CurrentUser { get; private set; }
     public bool IsLoggedIn => CurrentUser != null;
-
-    // ── Lifecycle ─────────────────────────────────────────────────
 
     void Awake()
     {
@@ -50,12 +40,6 @@ public class AuthManager : MonoBehaviour
         FirebaseManager.OnFirebaseReady -= CheckExistingSession;
     }
 
-    // ── Public Methods ────────────────────────────────────────────
-
-    /// <summary>
-    /// Registers a new user with email and password.
-    /// On success creates Firestore profile document and fires OnLoginSuccess.
-    /// </summary>
     public async Task Register(string email, string password, string name)
     {
         if (!ValidateInput(email, password)) return;
@@ -63,18 +47,18 @@ public class AuthManager : MonoBehaviour
         try
         {
             var auth = FirebaseManager.Instance.Auth;
-            var result = await auth.CreateUserWithEmailAndPasswordAsync(
-                email, password);
-
+            var result = await auth.CreateUserWithEmailAndPasswordAsync(email, password);
             CurrentUser = result.User;
             Debug.Log($"User registered: {CurrentUser.Email}");
 
-            // Create initial Firestore profile
             await CreateInitialProfile(CurrentUser.UserId, name, email);
 
-            // Fetch profile immediately after registration
+            // Clear cache and fetch fresh profile
+            ProfileCache.Instance?.ClearProfile(CurrentUser.UserId);
             await ProfileService.Instance.FetchProfile(CurrentUser.UserId);
+            Debug.Log($"Profile after register: {ProfileService.Instance.CurrentProfile?.name}");
 
+            // Fire AFTER profile is ready
             OnLoginSuccess?.Invoke(CurrentUser);
         }
         catch (Exception e)
@@ -84,9 +68,6 @@ public class AuthManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Logs in an existing user with email and password.
-    /// </summary>
     public async Task Login(string email, string password)
     {
         if (!ValidateInput(email, password)) return;
@@ -95,18 +76,15 @@ public class AuthManager : MonoBehaviour
         {
             var auth = FirebaseManager.Instance.Auth;
             var result = await auth.SignInWithEmailAndPasswordAsync(email, password);
-
             CurrentUser = result.User;
             Debug.Log($"User logged in: {CurrentUser.Email}");
 
-            // Clear stale cache
+            // Clear cache and fetch fresh profile
             ProfileCache.Instance?.ClearProfile(CurrentUser.UserId);
-
-            // Fetch profile BEFORE navigating
             await ProfileService.Instance.FetchProfile(CurrentUser.UserId);
-            Debug.Log($"Profile fetched after login: {ProfileService.Instance.CurrentProfile?.name}");
+            Debug.Log($"Profile after login: {ProfileService.Instance.CurrentProfile?.name}");
 
-            // Navigate AFTER profile ready
+            // Fire AFTER profile is ready
             OnLoginSuccess?.Invoke(CurrentUser);
         }
         catch (Exception e)
@@ -116,64 +94,52 @@ public class AuthManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Logs out the current user and clears session.
-    /// </summary>
     public void Logout()
     {
+        var uid = CurrentUser?.UserId;
         FirebaseManager.Instance.Auth.SignOut();
         CurrentUser = null;
+        if (uid != null) ProfileCache.Instance?.ClearProfile(uid);
         ProfileService.Instance?.ClearCurrentProfile();
         Debug.Log("User logged out");
         OnLoggedOut?.Invoke();
-        AppStateManager.Instance?.GoToAuth();
     }
 
-    // ── Private Methods ───────────────────────────────────────────
-
-    /// <summary>
-    /// Checks if a user session exists from a previous app launch.
-    /// If yes, skip auth screen and go straight to Home.
-    /// </summary>
     private async void CheckExistingSession()
     {
+        // Unsubscribe immediately — only run once
         FirebaseManager.OnFirebaseReady -= CheckExistingSession;
 
         Debug.Log("CheckExistingSession called");
         var auth = FirebaseManager.Instance.Auth;
         CurrentUser = auth.CurrentUser;
-        Debug.Log($"CurrentUser: {CurrentUser?.Email ?? "null"}");
 
         if (CurrentUser != null)
         {
-            // Clear stale cache first
+            Debug.Log($"Existing session: {CurrentUser.Email}");
+
+            // Clear stale cache and fetch fresh from Firebase
             ProfileCache.Instance?.ClearProfile(CurrentUser.UserId);
-
-            // Fetch fresh from Firebase BEFORE navigating
             await ProfileService.Instance.FetchProfile(CurrentUser.UserId);
-            Debug.Log($"Auto-fetched: {ProfileService.Instance.CurrentProfile?.name ?? "null"}");
+            Debug.Log($"Session profile: {ProfileService.Instance.CurrentProfile?.name ?? "null"}");
 
-            // Navigate AFTER profile is ready
+            // Fire AFTER profile is ready
             OnLoginSuccess?.Invoke(CurrentUser);
         }
         else
         {
-            Debug.Log("No existing session");
+            Debug.Log("No existing session — show auth");
+            // No user — go to auth screen directly
+            AppStateManager.Instance?.GoToAuth();
         }
     }
 
-    /// <summary>
-    /// Creates the initial Firestore profile document for a new user.
-    /// Called automatically after successful registration.
-    /// </summary>
     private async Task CreateInitialProfile(string uid, string name, string email)
     {
         try
         {
             var db = FirebaseManager.Instance.Database;
             var docRef = db.Collection("users").Document(uid);
-
-            // Compute initials from name
             string initials = ComputeInitials(name);
 
             var profileData = new System.Collections.Generic.Dictionary<string, object>
@@ -204,10 +170,6 @@ public class AuthManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Computes display initials from full name.
-    /// "Prahelika Dutta" → "PD"
-    /// </summary>
     private string ComputeInitials(string name)
     {
         if (string.IsNullOrEmpty(name)) return "?";
@@ -217,9 +179,6 @@ public class AuthManager : MonoBehaviour
         return parts[0][0].ToString().ToUpper();
     }
 
-    /// <summary>
-    /// Validates email and password before sending to Firebase.
-    /// </summary>
     private bool ValidateInput(string email, string password)
     {
         if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
@@ -235,21 +194,13 @@ public class AuthManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// Converts Firebase error messages to user-friendly strings.
-    /// </summary>
     private string ParseAuthError(string error)
     {
-        if (error.Contains("email-already-in-use"))
-            return "An account with this email already exists";
-        if (error.Contains("wrong-password"))
-            return "Incorrect password";
-        if (error.Contains("user-not-found"))
-            return "No account found with this email";
-        if (error.Contains("invalid-email"))
-            return "Invalid email address";
-        if (error.Contains("network-request-failed"))
-            return "No internet connection";
+        if (error.Contains("email-already-in-use")) return "An account with this email already exists";
+        if (error.Contains("wrong-password")) return "Incorrect password";
+        if (error.Contains("user-not-found")) return "No account found with this email";
+        if (error.Contains("invalid-email")) return "Invalid email address";
+        if (error.Contains("network-request-failed")) return "No internet connection";
         return "Something went wrong. Please try again";
     }
 }

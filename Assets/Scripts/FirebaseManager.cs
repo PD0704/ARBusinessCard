@@ -61,15 +61,20 @@ public class FirebaseManager : MonoBehaviour
 
     public async Task<UserProfile> FetchProfile(string uid)
     {
+        Debug.Log($"Fetching document for uid: '{uid}', IsInitialized: {IsInitialized}'");
+
         if (!IsInitialized) return null;
 
         try
         {
+            Debug.Log($"Fetching document for uid: '{uid}'");
             DocumentReference docRef = _db.Collection("users").Document(uid);
             DocumentSnapshot snapshot = await docRef.GetSnapshotAsync();
+            Debug.Log($"Snapshot exists: {snapshot.Exists}, path: {snapshot.Reference.Path}");
 
             if (snapshot.Exists)
             {
+                Debug.Log($"Snapshot exists — raw data: {snapshot.ToDictionary()}");
                 var profile = new UserProfile();
                 profile.uid = uid;
                 profile.name = snapshot.TryGetValue("name", out string name) ? name : "";

@@ -54,6 +54,15 @@ public class ProfileCache : MonoBehaviour
 
         string json = PlayerPrefs.GetString(key);
         UserProfile profile = JsonUtility.FromJson<UserProfile>(json);
+
+        // Invalidate cache if name is empty — stale data
+        if (profile == null || string.IsNullOrEmpty(profile.name))
+        {
+            Debug.Log("Cache has empty profile — clearing stale data");
+            ClearProfile(uid);
+            return null;
+        }
+
         Debug.Log($"Profile loaded from cache: {profile.name}");
         return profile;
     }
@@ -68,6 +77,7 @@ public class ProfileCache : MonoBehaviour
         PlayerPrefs.DeleteKey(CACHE_KEY + uid);
         PlayerPrefs.DeleteKey(CACHE_TIME_KEY + uid);
         PlayerPrefs.Save();
+        Debug.Log($"Cache cleared for uid: {uid}");
     }
 
     public void ClearAll()

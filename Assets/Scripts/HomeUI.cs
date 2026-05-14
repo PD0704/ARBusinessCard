@@ -40,6 +40,7 @@ public class HomeUI : MonoBehaviour
             UpdateWelcome(ProfileService.Instance.CurrentProfile.name);
         else
             LoadUserName();
+        Debug.Log($"HomeUI OnEnable — CurrentProfile: {ProfileService.Instance?.CurrentProfile?.name ?? "null"}");
     }
 
     void OnDisable()

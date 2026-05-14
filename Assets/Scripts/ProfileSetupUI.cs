@@ -6,74 +6,39 @@ using TMPro;
 
 /// <summary>
 /// Handles the creator profile setup form.
-/// Lets users fill in their professional details which are
-/// saved to Firestore and used to populate the AR overlay.
-/// Attach to the ProfileSetupPanel in the scene.
+/// Populates fields from CurrentProfile when opened.
+/// Saves to Firestore and refreshes CurrentProfile on save.
 /// </summary>
 public class ProfileSetupUI : MonoBehaviour
 {
     public static ProfileSetupUI Instance { get; private set; }
 
-    // ── Inspector References — Input Fields ───────────────────────
     [Header("Input Fields")]
-    [Tooltip("Full name input field")]
     [SerializeField] private TMP_InputField nameField;
-
-    [Tooltip("Job role/title input field")]
     [SerializeField] private TMP_InputField roleField;
-
-    [Tooltip("Company name input field")]
     [SerializeField] private TMP_InputField companyField;
-
-    [Tooltip("Phone number input field")]
     [SerializeField] private TMP_InputField phoneField;
-
-    [Tooltip("Email input field")]
     [SerializeField] private TMP_InputField emailField;
-
-    [Tooltip("Physical address input field")]
     [SerializeField] private TMP_InputField addressField;
-
-    [Tooltip("LinkedIn URL input field")]
     [SerializeField] private TMP_InputField linkedinField;
-
-    [Tooltip("Portfolio URL input field")]
     [SerializeField] private TMP_InputField portfolioField;
 
     [Header("Initials Settings")]
-    [Tooltip("Dropdown for choosing 2 or 3 initial style")]
     [SerializeField] private TMP_Dropdown initialsStyleDropdown;
-
-    [Tooltip("Preview text showing computed initials")]
     [SerializeField] private TextMeshProUGUI initialsPreviewText;
 
-    // ── Inspector References — Buttons ────────────────────────────
     [Header("Buttons")]
-    [Tooltip("Save profile button")]
     [SerializeField] private Button saveButton;
-
-    [Tooltip("Upload PDF resume button")]
     [SerializeField] private Button uploadPDFButton;
-
-    [Tooltip("Generate card button — triggers CardGenerator")]
     [SerializeField] private Button generateCardButton;
-
-    [Tooltip("Back button — returns to Home")]
     [SerializeField] private Button backButton;
 
-    // ── Inspector References — Feedback ───────────────────────────
     [Header("Feedback")]
-    [Tooltip("Loading spinner shown while saving")]
     [SerializeField] private GameObject loadingSpinner;
-
-    [Tooltip("Success message shown after save")]
     [SerializeField] private TextMeshProUGUI feedbackText;
 
-    // ── State ─────────────────────────────────────────────────────
     private UserProfile _currentProfile;
     private bool _isSaving;
-
-    // ── Lifecycle ─────────────────────────────────────────────────
 
     void Awake()
     {
@@ -94,14 +59,18 @@ public class ProfileSetupUI : MonoBehaviour
         nameField?.onValueChanged.AddListener(OnNameChanged);
         initialsStyleDropdown?.onValueChanged.AddListener(OnInitialsStyleChanged);
 
-        // Listen for profile fetch
-        ProfileService.OnProfileFetched += OnProfileLoaded;
-
-        // If profile already loaded use it immediately
-        if (ProfileService.Instance?.CurrentProfile != null)
-            PopulateFields(ProfileService.Instance.CurrentProfile);
+        // Try to populate immediately from CurrentProfile
+        var profile = ProfileService.Instance?.CurrentProfile;
+        if (profile != null)
+        {
+            Debug.Log($"ProfileSetupUI OnEnable — populating from CurrentProfile: {profile.name}");
+            PopulateFields(profile);
+        }
         else
-            LoadCurrentProfile();
+        {
+            Debug.Log("ProfileSetupUI OnEnable — no CurrentProfile, fetching...");
+            FetchAndPopulate();
+        }
     }
 
     void OnDisable()
@@ -112,40 +81,26 @@ public class ProfileSetupUI : MonoBehaviour
         backButton?.onClick.RemoveListener(OnBackClicked);
         nameField?.onValueChanged.RemoveListener(OnNameChanged);
         initialsStyleDropdown?.onValueChanged.RemoveListener(OnInitialsStyleChanged);
-        ProfileService.OnProfileFetched -= OnProfileLoaded;
     }
 
-    // ── Public Methods ────────────────────────────────────────────
-
-    /// <summary>
-    /// Loads current user profile data into all input fields.
-    /// Called when the setup screen opens.
-    /// </summary>
-    public void LoadCurrentProfile()
+    private async void FetchAndPopulate()
     {
         var uid = AuthManager.Instance?.CurrentUser?.UserId;
         if (string.IsNullOrEmpty(uid)) return;
 
-        // If profile already cached use it immediately
-        var cached = ProfileCache.Instance?.LoadProfile(uid);
-        if (cached != null)
+        ShowFeedback("Loading...", true);
+        await ProfileService.Instance.FetchProfile(uid);
+
+        var profile = ProfileService.Instance.CurrentProfile;
+        if (profile != null)
         {
-            PopulateFields(cached);
-            _ = ProfileService.Instance.FetchProfile(uid); // refresh in background
-            return;
+            PopulateFields(profile);
+            ShowFeedback("", false);
         }
-
-        // No cache — fetch from Firebase
-        ShowFeedback("Loading profile...", true);
-        ProfileService.OnProfileFetched += OnProfileLoaded;
-        _ = ProfileService.Instance.FetchProfile(uid);
-    }
-
-    private void OnProfileLoaded(UserProfile profile)
-    {
-        ProfileService.OnProfileFetched -= OnProfileLoaded;
-        PopulateFields(profile);
-        ShowFeedback("", false);
+        else
+        {
+            ShowFeedback("Could not load profile", false);
+        }
     }
 
     private void PopulateFields(UserProfile profile)
@@ -162,17 +117,11 @@ public class ProfileSetupUI : MonoBehaviour
         if (initialsStyleDropdown != null)
             initialsStyleDropdown.value = profile.initialsStyle == "3" ? 1 : 0;
         UpdateInitialsPreview();
+        Debug.Log($"PopulateFields complete: {profile.name}");
     }
 
-    // ── Private Methods ───────────────────────────────────────────
-
-    /// <summary>
-    /// Saves all input field values to Firestore.
-    /// Updates both the database and local cache.
-    /// </summary>
     private async void OnSaveClicked()
     {
-        Debug.Log($"Saving — name field value: '{nameField?.text}'");
         if (_isSaving) return;
         if (AuthManager.Instance?.CurrentUser == null)
         {
@@ -182,13 +131,15 @@ public class ProfileSetupUI : MonoBehaviour
 
         _isSaving = true;
         if (loadingSpinner != null) loadingSpinner.SetActive(true);
-        ShowFeedback("", false);
+        ShowFeedback("Saving...", true);
 
         try
         {
             string uid = AuthManager.Instance.CurrentUser.UserId;
             string initialsStyle = initialsStyleDropdown?.value == 1 ? "3" : "2";
             string name = nameField?.text.Trim() ?? "";
+
+            Debug.Log($"Saving profile — name: '{name}'");
 
             var db = FirebaseManager.Instance.Database;
             var docRef = db.Collection("users").Document(uid);
@@ -209,20 +160,24 @@ public class ProfileSetupUI : MonoBehaviour
             };
 
             await docRef.UpdateAsync(updates);
+            Debug.Log("Firestore update complete");
 
-            // Refresh local cache
-            // Wait briefly for Firestore write to complete
-            await System.Threading.Tasks.Task.Delay(1000);
+            // Clear cache so next fetch gets fresh data
+            ProfileCache.Instance?.ClearProfile(uid);
+
+            // Wait for Firestore to propagate
+            await Task.Delay(500);
+
+            // Fetch fresh profile
             await ProfileService.Instance.FetchProfile(uid);
             _currentProfile = ProfileService.Instance.CurrentProfile;
-            Debug.Log($"Profile fetched: {_currentProfile?.name}");
-            Debug.Log($"After save, CurrentProfile: {ProfileService.Instance.CurrentProfile?.name}");
-            ShowFeedback("Profile saved successfully", true);
-            Debug.Log("Profile saved to Firestore");
+
+            Debug.Log($"After save — CurrentProfile: {_currentProfile?.name}");
+            ShowFeedback("Profile saved!", true);
         }
         catch (Exception e)
         {
-            Debug.LogError($"Failed to save profile: {e.Message}");
+            Debug.LogError($"Save failed: {e.Message}");
             ShowFeedback("Failed to save. Check connection.", false);
         }
         finally
@@ -232,26 +187,16 @@ public class ProfileSetupUI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Opens device file picker to select a PDF resume.
-    /// Uploads to Firebase Storage and saves download URL to profile.
-    /// </summary>
     private void OnUploadPDFClicked()
     {
-        // PDF upload via NativeFilePicker — implemented in Phase 7
-        Debug.Log("PDF upload — coming in Phase 7");
         ShowFeedback("PDF upload coming soon", false);
     }
 
-    /// <summary>
-    /// Triggers card generation with current profile data.
-    /// Saves profile first to ensure latest data is used.
-    /// </summary>
     private void OnGenerateCardClicked()
     {
         var profile = ProfileService.Instance?.CurrentProfile ?? _currentProfile;
 
-        if (profile == null)
+        if (profile == null || string.IsNullOrEmpty(profile.name))
         {
             ShowFeedback("Please save your profile first", false);
             return;
@@ -262,33 +207,14 @@ public class ProfileSetupUI : MonoBehaviour
         CardGenerator.Instance?.GenerateCard(profile);
     }
 
-    /// <summary>
-    /// Returns to Home screen.
-    /// </summary>
     private void OnBackClicked()
     {
         AppStateManager.Instance?.GoToHome();
     }
 
-    /// <summary>
-    /// Updates initials preview text when name field changes.
-    /// </summary>
-    private void OnNameChanged(string name)
-    {
-        UpdateInitialsPreview();
-    }
+    private void OnNameChanged(string name) => UpdateInitialsPreview();
+    private void OnInitialsStyleChanged(int index) => UpdateInitialsPreview();
 
-    /// <summary>
-    /// Updates initials preview when style dropdown changes.
-    /// </summary>
-    private void OnInitialsStyleChanged(int index)
-    {
-        UpdateInitialsPreview();
-    }
-
-    /// <summary>
-    /// Recomputes and displays initials based on current name and style.
-    /// </summary>
     private void UpdateInitialsPreview()
     {
         if (initialsPreviewText == null) return;
@@ -297,15 +223,10 @@ public class ProfileSetupUI : MonoBehaviour
         initialsPreviewText.text = ComputeInitials(name, style);
     }
 
-    /// <summary>
-    /// Computes initials from name based on chosen style.
-    /// Style 2 = first + last initial. Style 3 = first + middle + last.
-    /// </summary>
     private string ComputeInitials(string name, string style)
     {
         if (string.IsNullOrEmpty(name)) return "?";
         string[] parts = name.Trim().Split(' ');
-
         if (style == "3" && parts.Length >= 3)
             return $"{parts[0][0]}{parts[1][0]}{parts[2][0]}".ToUpper();
         else if (parts.Length >= 2)
@@ -314,10 +235,8 @@ public class ProfileSetupUI : MonoBehaviour
             return parts[0][0].ToString().ToUpper();
     }
 
-    /// <summary>
-    /// Shows feedback message to user.
-    /// Green for success, red for error.
-    /// </summary>
+    private string ComputeInitials(string name) => ComputeInitials(name, "2");
+
     private void ShowFeedback(string message, bool success)
     {
         if (feedbackText == null) return;
@@ -327,10 +246,4 @@ public class ProfileSetupUI : MonoBehaviour
             : new Color(0.9f, 0.3f, 0.3f);
         feedbackText.gameObject.SetActive(!string.IsNullOrEmpty(message));
     }
-
-    /// <summary>
-    /// Computes initials using default style from profile.
-    /// </summary>
-    private string ComputeInitials(string name)
-        => ComputeInitials(name, "2");
 }

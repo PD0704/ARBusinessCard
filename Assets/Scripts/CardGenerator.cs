@@ -234,39 +234,45 @@ public class CardGenerator : MonoBehaviour
     private void ShareCardImage(string filePath)
     {
 #if UNITY_ANDROID && !UNITY_EDITOR
-        try
-        {
-            AndroidJavaClass unityPlayer = new AndroidJavaClass(
-                "com.unity3d.player.UnityPlayer");
-            AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>(
-                "currentActivity");
+    try
+    {
+        AndroidJavaClass unityPlayer = new AndroidJavaClass(
+            "com.unity3d.player.UnityPlayer");
+        AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>(
+            "currentActivity");
 
-            AndroidJavaObject intent = new AndroidJavaObject(
-                "android.content.Intent");
-            intent.Call<AndroidJavaObject>("setAction",
-                "android.intent.action.SEND");
+        AndroidJavaClass fileProviderClass = new AndroidJavaClass(
+            "androidx.core.content.FileProvider");
+        
+        AndroidJavaObject javaFile = new AndroidJavaObject(
+            "java.io.File", filePath);
+        
+        AndroidJavaObject uri = fileProviderClass.CallStatic<AndroidJavaObject>(
+            "getUriForFile",
+            activity,
+            "com.prahelikad.arbusinesscard.fileprovider",
+            javaFile);
 
-            AndroidJavaObject uri = new AndroidJavaClass("android.net.Uri")
-                .CallStatic<AndroidJavaObject>("parse", $"file://{filePath}");
+        AndroidJavaObject intent = new AndroidJavaObject(
+            "android.content.Intent");
+        intent.Call<AndroidJavaObject>("setAction", "android.intent.action.SEND");
+        intent.Call<AndroidJavaObject>("setType", "image/png");
+        intent.Call<AndroidJavaObject>("putExtra",
+            "android.intent.extra.STREAM", uri);
+        intent.Call<AndroidJavaObject>("addFlags", 1); // FLAG_GRANT_READ_URI_PERMISSION
 
-            intent.Call<AndroidJavaObject>("setType", "image/png");
-            intent.Call<AndroidJavaObject>("putExtra",
-                "android.intent.extra.STREAM", uri);
-            intent.Call<AndroidJavaObject>("addFlags", 1);
+        AndroidJavaClass intentClass = new AndroidJavaClass("android.content.Intent");
+        AndroidJavaObject chooser = intentClass.CallStatic<AndroidJavaObject>(
+            "createChooser", intent, "Share your AR Business Card");
 
-            AndroidJavaClass intentClass = new AndroidJavaClass("android.content.Intent");
-            AndroidJavaObject chooser = intentClass.CallStatic<AndroidJavaObject>(
-                "createChooser", intent, "Share your AR Business Card");
-
-            activity.Call("startActivity", chooser);
-            Debug.Log("Share sheet opened");
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"Share failed: {e.Message}");
-        }
+        activity.Call("startActivity", chooser);
+        Debug.Log("Share sheet opened");
+    }
+    catch (Exception e)
+    {
+        Debug.LogError($"Share failed: {e.Message}");
+    }
 #else
-        // In editor — just log the path
         Debug.Log($"[Editor] Card would be shared from: {filePath}");
 #endif
     }
